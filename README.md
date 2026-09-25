@@ -49,6 +49,15 @@ Wikimedia EventStreams (SSE)
 
 The `kafka-demo` module is a separate, self-contained sandbox (topic `NadaJbr`) used to demonstrate the core Kafka concepts — String messages, JSON payload serialization, topic provisioning via `NewTopic` beans, and REST-triggered publishing — before applying them in the real pipeline above.
 
+**Ports**
+
+| Service | Port |
+|---|---|
+| `producer/producer` | 8082 |
+| `consumer/consumer` | 8083 |
+| Kafka broker | 9092 |
+| MongoDB | 27017 |
+
 ### Tech stack
 
 - **Language / Runtime:** Java 17
@@ -83,7 +92,10 @@ The `kafka-demo` module is a separate, self-contained sandbox (topic `NadaJbr`) 
 - Java 17+
 - Maven
 - A running Kafka broker (`localhost:9092` by default)
-- A running MongoDB instance
+- A running MongoDB instance — quickest way locally is Docker:
+  ```bash
+  docker run -d --name mongo -p 27017:27017 mongo:7
+  ```
 
 **Run the fundamentals demo**
 ```bash
@@ -93,7 +105,7 @@ cd kafka-demo
 
 **Run the real-time pipeline**
 ```bash
-# Terminal 1 — consumer (persists to MongoDB)
+# Terminal 1 — consumer (port 8083, persists to MongoDB)
 cd consumer/consumer
 ./mvnw spring-boot:run
 
@@ -108,6 +120,24 @@ curl http://localhost:8082/api/v1/wikimedia
 ```
 
 Live Wikipedia edits will start flowing: Wikimedia → Producer → Kafka (`wikimedia-stream`) → Consumer → MongoDB.
+
+> **Why a manual trigger?** The producer doesn't auto-connect to the Wikimedia feed on startup by design — it only starts streaming once `GET /api/v1/wikimedia` is called. This keeps control over *when* the app starts consuming an external live feed, and keeps producer and consumer fully decoupled: the consumer needs no trigger at all — its `@KafkaListener` is active continuously and reacts to messages the moment they land on the topic, independently of the producer's lifecycle.
+
+### Verifying the pipeline works end-to-end
+
+1. **Kafka delivery** — while the producer is running, watch the topic directly:
+   ```bash
+   .\bin\windows\kafka-console-consumer.bat --topic wikimedia-stream --bootstrap-server localhost:9092
+   ```
+   Messages appearing here confirm the producer → Kafka leg independently of the Spring consumer.
+2. **Consumer logs** — the `consumer/consumer` terminal should show `Consuming the message from wikimedia-stream Topic::` lines scrolling as events arrive.
+3. **MongoDB persistence** — confirm documents are actually being written, not just logged:
+   ```bash
+   docker exec -it mongo mongosh
+   use wikimedia_stream
+   db.wikimedia_events.countDocuments()
+   ```
+   Run `countDocuments()` a couple of times a few seconds apart — a climbing count confirms the full pipeline (Wikimedia → Producer → Kafka → Consumer → MongoDB) is working end-to-end. MongoDB Compass (`mongodb://localhost:27017`) gives the same view visually, live.
 
 ### Project structure
 ```
@@ -157,6 +187,15 @@ Wikimedia EventStreams (SSE)
 
 Le module `kafka-demo` est un bac à sable séparé (topic `NadaJbr`) qui illustre les concepts fondamentaux de Kafka — messages String, sérialisation JSON, provisioning de topics via des beans `NewTopic`, publication déclenchée par API REST — avant leur mise en application dans le pipeline réel ci-dessus.
 
+**Ports**
+
+| Service | Port |
+|---|---|
+| `producer/producer` | 8082 |
+| `consumer/consumer` | 8083 |
+| Broker Kafka | 9092 |
+| MongoDB | 27017 |
+
 ### Stack technique
 
 - **Langage / Runtime :** Java 17
@@ -173,7 +212,10 @@ Le module `kafka-demo` est un bac à sable séparé (topic `NadaJbr`) qui illust
 - Java 17+
 - Maven
 - Un broker Kafka actif (`localhost:9092` par défaut)
-- Une instance MongoDB active
+- Une instance MongoDB active — le plus rapide en local via Docker :
+  ```bash
+  docker run -d --name mongo -p 27017:27017 mongo:7
+  ```
 
 **Lancer la démo fondamentaux**
 ```bash
@@ -183,7 +225,7 @@ cd kafka-demo
 
 **Lancer le pipeline temps réel**
 ```bash
-# Terminal 1 — consumer (persiste dans MongoDB)
+# Terminal 1 — consumer (port 8083, persiste dans MongoDB)
 cd consumer/consumer
 ./mvnw spring-boot:run
 
@@ -198,6 +240,24 @@ curl http://localhost:8082/api/v1/wikimedia
 ```
 
 Les modifications Wikipedia en direct commencent alors à circuler : Wikimedia → Producer → Kafka (`wikimedia-stream`) → Consumer → MongoDB.
+
+> **Pourquoi un déclenchement manuel ?** Le producer ne se connecte pas automatiquement au flux Wikimedia au démarrage — c'est volontaire. Il ne commence à streamer que lorsque `GET /api/v1/wikimedia` est appelé, ce qui garde le contrôle sur *quand* l'app commence à consommer un flux externe live, et préserve le découplage total entre producer et consumer : le consumer, lui, n'a besoin d'aucun déclenchement — son `@KafkaListener` est actif en permanence et réagit dès qu'un message arrive sur le topic, indépendamment du cycle de vie du producer.
+
+### Vérifier que le pipeline fonctionne de bout en bout
+
+1. **Livraison Kafka** — pendant que le producer tourne, observer le topic directement :
+   ```bash
+   .\bin\windows\kafka-console-consumer.bat --topic wikimedia-stream --bootstrap-server localhost:9092
+   ```
+   Voir des messages ici confirme le tronçon producer → Kafka, indépendamment du consumer Spring.
+2. **Logs du consumer** — le terminal de `consumer/consumer` doit afficher des lignes `Consuming the message from wikimedia-stream Topic::` au fil des événements.
+3. **Persistance MongoDB** — confirmer que les documents sont bien écrits, pas seulement loggés :
+   ```bash
+   docker exec -it mongo mongosh
+   use wikimedia_stream
+   db.wikimedia_events.countDocuments()
+   ```
+   Relancer `countDocuments()` à quelques secondes d'intervalle — un compteur qui grimpe confirme que tout le pipeline (Wikimedia → Producer → Kafka → Consumer → MongoDB) fonctionne de bout en bout. MongoDB Compass (`mongodb://localhost:27017`) donne la même vue, en direct et visuellement.
 
 ### Structure du projet
 ```
